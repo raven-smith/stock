@@ -1,0 +1,831 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>关键节点涨停股票标记系统</title>
+  <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
+  <style>
+    :root {
+      --bg: #f5f7fb;
+      --card: #ffffff;
+      --text: #101828;
+      --muted: #667085;
+      --line: #e4e7ec;
+      --primary: #245af2;
+      --primary-hover: #194bd9;
+      --danger: #d92d20;
+      --danger-soft: #fef3f2;
+      --highlight: #fff2bd;
+      --highlight-border: #f6c342;
+      --shadow: 0 1px 3px rgba(16,24,40,.06), 0 10px 28px rgba(16,24,40,.04);
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: "Microsoft YaHei", "PingFang SC", Arial, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+    }
+    button, input, select { font: inherit; }
+    .header {
+      height: 66px;
+      background: #fff;
+      border-bottom: 1px solid var(--line);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 28px;
+      position: sticky;
+      top: 0;
+      z-index: 20;
+    }
+    .brand { display: flex; align-items: center; gap: 12px; }
+    .logo {
+      width: 38px; height: 38px; border-radius: 11px;
+      display: grid; place-items: center;
+      color: #fff; background: linear-gradient(135deg, #245af2, #123ac4);
+      font-size: 21px; font-weight: 700;
+    }
+    .brand-title { font-size: 18px; font-weight: 700; line-height: 1.15; }
+    .brand-sub { font-size: 12px; color: var(--muted); margin-top: 3px; }
+    .saved { font-size: 13px; color: var(--muted); display: flex; gap: 7px; align-items: center; }
+    .saved-dot { width: 8px; height: 8px; background: #12b76a; border-radius: 50%; }
+    .app { padding: 24px 28px 34px; max-width: 1600px; margin: 0 auto; }
+    .hero {
+      background: var(--card); border: 1px solid var(--line); border-radius: 16px;
+      padding: 20px 22px; display: flex; justify-content: space-between;
+      align-items: flex-start; gap: 26px; box-shadow: var(--shadow);
+    }
+    h1 { font-size: 21px; margin: 0 0 7px; }
+    .description { margin: 0; font-size: 14px; color: var(--muted); line-height: 1.7; }
+    .actions { display: flex; align-items: center; justify-content: flex-end; gap: 10px; flex-wrap: wrap; min-width: 510px; }
+    .btn {
+      border-radius: 9px; padding: 9px 14px; border: 1px solid var(--line);
+      background: #fff; color: #344054; cursor: pointer; transition: .15s;
+      white-space: nowrap; font-size: 14px;
+    }
+    .btn:hover { background: #f9fafb; border-color: #d0d5dd; }
+    .btn-primary { background: var(--primary); border-color: var(--primary); color: #fff; }
+    .btn-primary:hover { background: var(--primary-hover); border-color: var(--primary-hover); }
+    .btn-danger { color: var(--danger); background: #fff; }
+    .file-input { display: none; }
+    .stats {
+      display: grid; grid-template-columns: repeat(4, minmax(178px, 1fr));
+      gap: 14px; margin: 18px 0;
+    }
+    .stat {
+      border: 1px solid var(--line); background: var(--card); border-radius: 13px;
+      padding: 15px 18px; box-shadow: var(--shadow);
+    }
+    .stat-label { color: var(--muted); font-size: 13px; margin-bottom: 9px; }
+    .stat-num { font-size: 28px; font-weight: 700; letter-spacing: -.5px; }
+    .stat-note { font-size: 12px; color: var(--muted); margin-left: 6px; }
+    .main { display: grid; grid-template-columns: minmax(680px, 1fr) 330px; gap: 16px; align-items: start; }
+    .panel {
+      background: var(--card); border: 1px solid var(--line); border-radius: 14px;
+      box-shadow: var(--shadow); overflow: hidden;
+    }
+    .panel-head {
+      padding: 15px 18px; border-bottom: 1px solid var(--line);
+      display: flex; justify-content: space-between; align-items: center; gap: 12px;
+    }
+    .panel-title { font-size: 16px; font-weight: 700; }
+    .panel-note { color: var(--muted); font-size: 12px; margin-top: 4px; }
+    .small-actions { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+    .small-actions .btn { font-size: 13px; padding: 7px 11px; }
+    .month-filter {
+      display: flex; align-items: center; gap: 6px; color: #475467;
+      font-size: 13px; padding-right: 4px;
+    }
+    .month-select {
+      min-width: 126px; height: 34px; padding: 0 9px; border-radius: 8px;
+      border: 1px solid var(--line); background: #fff; color: #344054; outline: none;
+    }
+    .month-select:focus { border-color: #84adff; box-shadow: 0 0 0 3px #eff4ff; }
+    .table-wrap { overflow: auto; max-height: calc(100vh - 365px); min-height: 420px; }
+    table { border-collapse: separate; border-spacing: 0; min-width: 100%; }
+    th, td { border-right: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+    th:last-child, td:last-child { border-right: 0; }
+    thead th {
+      position: sticky; top: 0; z-index: 5; background: #f8fafc;
+      padding: 10px 10px; min-width: 172px;
+    }
+    thead th.index { min-width: 54px; width: 54px; left: 0; z-index: 7; }
+    tbody td.index {
+      position: sticky; left: 0; z-index: 2; width: 54px; min-width: 54px;
+      text-align: center; font-size: 12px; color: var(--muted); background: #f8fafc;
+    }
+    .date-head { display: flex; flex-direction: column; gap: 7px; min-width: 164px; }
+    .date-box { display: flex; align-items: center; gap: 7px; }
+    .date-input {
+      border: 1px solid transparent; border-radius: 7px; background: transparent;
+      padding: 7px 6px; width: 128px; color: #344054; font-weight: 600;
+    }
+    .date-input:hover, .date-input:focus { background: #fff; border-color: #b2ccff; outline: none; }
+    .tag-input {
+      width: 154px; height: 29px; padding: 4px 9px; border-radius: 15px;
+      font-size: 12px; font-weight: 600; border: 1px dashed #d0d5dd;
+      color: #667085; background: #fff; outline: none; transition: .15s;
+    }
+    .tag-input::placeholder { color: #98a2b3; font-weight: 400; }
+    .tag-input:focus { border-style: solid; box-shadow: 0 0 0 3px #eff4ff; }
+    .delete-col {
+      width: 25px; height: 25px; border-radius: 6px; border: 0;
+      color: #98a2b3; background: transparent; cursor: pointer; font-size: 18px;
+    }
+    .delete-col:hover { color: var(--danger); background: var(--danger-soft); }
+    tbody td:not(.index) { min-width: 172px; padding: 6px 9px; background: #fff; }
+    .cell-input {
+      width: 100%; border-radius: 7px; border: 1px solid transparent;
+      padding: 8px 9px; height: 38px; color: #1d2939; background: transparent;
+    }
+    .cell-input::placeholder { color: #d0d5dd; }
+    .cell-input:hover { border-color: #eaecf0; }
+    .cell-input:focus { border-color: #84adff; outline: none; box-shadow: 0 0 0 3px #eff4ff; }
+    .duplicate-cell { background: #fffaf0 !important; }
+    .duplicate-cell .cell-input {
+      background: var(--highlight); border: 1px solid var(--highlight-border);
+      font-weight: 700; color: #8b4700;
+    }
+    .legend { display: flex; align-items: center; color: var(--muted); font-size: 12px; gap: 8px; }
+    .legend-mark { background: var(--highlight); border: 1px solid var(--highlight-border); border-radius: 5px; height: 17px; width: 27px; }
+    .sidebar { padding-bottom: 8px; }
+    .summary { padding: 12px 14px 14px; max-height: calc(100vh - 333px); overflow: auto; }
+    .empty {
+      border: 1px dashed #d0d5dd; color: var(--muted); border-radius: 10px;
+      padding: 34px 20px; font-size: 13px; line-height: 1.7; text-align: center;
+    }
+    .dup-card {
+      border: 1px solid #fedf89; background: #fffcf5; border-radius: 10px;
+      padding: 11px 12px; margin-bottom: 10px;
+    }
+    .dup-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+    .dup-name { font-size: 14px; font-weight: 700; color: #7a2e0e; }
+    .badge {
+      font-size: 12px; color: #b54708; border-radius: 12px; background: #fef0c7;
+      padding: 2px 8px; font-weight: 600;
+    }
+    .dates { display: flex; gap: 5px; flex-wrap: wrap; }
+    .date-tag {
+      display: flex; flex-direction: column; gap: 3px; font-size: 11px;
+      padding: 4px 8px; border-radius: 13px; border: 1px solid #eaecf0;
+    }
+    .date-tag-label { font-size: 10px; font-weight: 700; }
+    .tips {
+      margin: 12px 14px 0; padding: 12px; border-radius: 10px;
+      background: #f8fafc; color: #475467; font-size: 12px; line-height: 1.7;
+    }
+    .toast {
+      position: fixed; bottom: 26px; left: 50%; transform: translate(-50%, 20px);
+      padding: 11px 18px; border-radius: 9px; color: #fff; background: #101828;
+      font-size: 14px; opacity: 0; pointer-events: none; transition: .2s;
+      box-shadow: 0 9px 25px rgba(16,24,40,.24); z-index: 100;
+    }
+    .toast.show { transform: translate(-50%, 0); opacity: 1; }
+    .dialog-mask {
+      position: fixed; inset: 0; background: rgba(16,24,40,.45); display: none;
+      align-items: center; justify-content: center; z-index: 60;
+    }
+    .dialog-mask.open { display: flex; }
+    .dialog {
+      width: min(570px, calc(100vw - 44px)); background: #fff; border-radius: 15px;
+      box-shadow: 0 20px 55px rgba(16,24,40,.24); padding: 23px 24px;
+    }
+    .dialog h2 { font-size: 18px; margin: 0 0 13px; }
+    .dialog li { font-size: 14px; color: #475467; line-height: 1.75; }
+    .dialog ol { margin: 0 0 18px; padding-left: 23px; }
+    .dialog-foot { text-align: right; }
+    @media (max-width: 1080px) {
+      .hero { flex-direction: column; }
+      .actions { min-width: 0; justify-content: flex-start; }
+      .main { grid-template-columns: 1fr; }
+      .stats { grid-template-columns: repeat(2, 1fr); }
+      .table-wrap { max-height: none; }
+    }
+  </style>
+</head>
+<body>
+  <header class="header">
+    <div class="brand">
+      <div class="logo">K</div>
+      <div>
+        <div class="brand-title">关键节点涨停股票标记系统</div>
+        <div class="brand-sub">Limit-up Node Tracker · 本地数据表版</div>
+      </div>
+    </div>
+    <div class="saved"><span class="saved-dot"></span><span id="saveStatus">数据已保存在当前浏览器</span></div>
+  </header>
+
+  <main class="app">
+    <section class="hero">
+      <div>
+        <h1>关键节点数据表</h1>
+        <p class="description">每列对应一个关键日期，可为日期添加可编辑分类标签；不同标签自动以不同颜色显示。股票在至少两个不同日期出现时，系统自动高亮其全部出现位置。</p>
+      </div>
+      <div class="actions">
+        <label class="btn btn-primary" for="fileInput">上传 Excel</label>
+        <input class="file-input" type="file" id="fileInput" accept=".xlsx,.xls,.csv" />
+        <button class="btn" id="exportBtn">导出 Excel</button>
+        <button class="btn" id="templateBtn">下载模板</button>
+        <button class="btn" id="helpBtn">使用说明</button>
+      </div>
+    </section>
+
+    <section class="stats">
+      <div class="stat"><div class="stat-label">当前显示节点日期</div><span class="stat-num" id="dateCount">0</span><span class="stat-note">列</span></div>
+      <div class="stat"><div class="stat-label">已录入股票记录</div><span class="stat-num" id="recordCount">0</span><span class="stat-note">条</span></div>
+      <div class="stat"><div class="stat-label">重复标记股票</div><span class="stat-num" id="duplicateCount">0</span><span class="stat-note">只</span></div>
+      <div class="stat"><div class="stat-label">最多覆盖节点</div><span class="stat-num" id="maxNodeCount">0</span><span class="stat-note">个日期</span></div>
+    </section>
+
+    <section class="main">
+      <div class="panel">
+        <div class="panel-head">
+          <div>
+            <div class="panel-title">涨停股票录入表</div>
+            <div class="panel-note">可直接编辑日期、日期标签与股票名称；粘贴多行股票名称将自动向下填充。</div>
+          </div>
+          <div class="small-actions">
+            <label class="month-filter" for="monthFilter"><span>月份</span><select class="month-select" id="monthFilter" aria-label="按月份筛选"><option value="ALL">全部月份</option></select></label>
+            <button class="btn" id="addDateBtn">＋ 新增日期</button>
+            <button class="btn" id="addRowBtn">＋ 新增行</button>
+            <button class="btn" id="sampleBtn">示例数据</button>
+            <button class="btn btn-danger" id="clearBtn">清空</button>
+          </div>
+        </div>
+        <div class="table-wrap">
+          <table id="stockTable">
+            <thead id="tableHead"></thead>
+            <tbody id="tableBody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <aside class="panel sidebar">
+        <div class="panel-head">
+          <div>
+            <div class="panel-title">重复节点股票</div>
+            <div class="panel-note" id="summaryScope">全部月份 · 按覆盖日期数量降序显示</div>
+          </div>
+          <div class="legend"><span class="legend-mark"></span>高亮</div>
+        </div>
+        <div class="tips">匹配规则：忽略股票名称中的空格、全角空格与制表符差异；同一股票仅在同一日期重复录入，不会被判断为跨节点重复。相同日期标签会保持同色。</div>
+        <div class="summary" id="summary"></div>
+      </aside>
+    </section>
+  </main>
+
+  <div class="dialog-mask" id="helpDialog">
+    <div class="dialog">
+      <h2>Excel 数据格式</h2>
+      <ol>
+        <li>第一行填写关键日期，每一列为一个日期，例如：2026-05-08、2026-05-15。</li>
+        <li>第二行为可选日期标签，格式为“标签：指数共振”“标签：政策驱动”等。</li>
+        <li>标签行之后填写当日涨停股票名称，每列可填写任意数量。</li>
+        <li>上传后仍可修改表头、标签与单元格，系统会实时识别跨日期重复股票。</li>
+        <li>点击“导出 Excel”可保存当前数据，标签会一并导出。</li>
+      </ol>
+      <div class="dialog-foot"><button class="btn btn-primary" id="closeHelpBtn">知道了</button></div>
+    </div>
+  </div>
+  <div class="toast" id="toast"></div>
+
+<script>
+  'use strict';
+
+  const STORAGE_KEY = 'keyNodeStockTracker_v1';
+  const TAG_THEMES = [
+    { bg: '#eff8ff', border: '#b2ddff', text: '#175cd3' },
+    { bg: '#f4f3ff', border: '#d9d6fe', text: '#5925dc' },
+    { bg: '#ecfdf3', border: '#abefc6', text: '#067647' },
+    { bg: '#fff6ed', border: '#ffd6ae', text: '#c4320a' },
+    { bg: '#fdf2fa', border: '#fcceee', text: '#c11574' },
+    { bg: '#fefbe8', border: '#f5e27a', text: '#854a0e' }
+  ];
+  const DEFAULT_STATE = {
+    columns: ['2026-05-08', '2026-05-15', '2026-05-22'],
+    tags: ['指数共振', '板块轮动', '指数共振'],
+    matrix: [
+      ['中矿资源', '西部矿业', '紫金矿业'],
+      ['北方铜业', '中矿资源', '赤峰黄金'],
+      ['西部矿业', '湖南黄金', '中矿资源'],
+      ['', '北方铜业', ''],
+      ['', '', '']
+    ]
+  };
+
+  let state = loadState() || clone(DEFAULT_STATE);
+  let toastTimer = null;
+  let activeMonth = 'ALL';
+
+  function $(id) {
+    return document.getElementById(id);
+  }
+
+  function clone(value) {
+    return JSON.parse(JSON.stringify(value));
+  }
+
+  function displayText(value) {
+    return String(value || '').trim();
+  }
+
+  function normalizeStock(value) {
+    const normalized = String(value || '').normalize('NFKC').toUpperCase();
+    return Array.from(normalized).filter(character => character.trim() !== '').join('');
+  }
+
+  function getMonthKey(value) {
+    const normalizedDate = displayText(value)
+      .replaceAll('年', '-')
+      .replaceAll('月', '-')
+      .replaceAll('日', '')
+      .replaceAll('/', '-')
+      .replaceAll('.', '-');
+    const parts = normalizedDate.split('-');
+    if (parts.length < 2 || parts[0].length !== 4) return '';
+    const year = Number(parts[0]);
+    const month = Number(parts[1]);
+    if (!Number.isInteger(year) || !Number.isInteger(month) || month < 1 || month > 12) return '';
+    return `${String(year)}-${String(month).padStart(2, '0')}`;
+  }
+
+  function getVisibleColumnIndexes(dataState = state) {
+    return dataState.columns
+      .map((date, index) => ({ month: getMonthKey(date), index }))
+      .filter(item => activeMonth === 'ALL' || item.month === activeMonth)
+      .map(item => item.index);
+  }
+
+  function renderMonthOptions() {
+    const select = $('monthFilter');
+    const months = [...new Set(state.columns.map(getMonthKey).filter(Boolean))].sort().reverse();
+    if (activeMonth !== 'ALL' && !months.includes(activeMonth)) activeMonth = 'ALL';
+    select.replaceChildren();
+    const allOption = document.createElement('option');
+    allOption.value = 'ALL';
+    allOption.textContent = '全部月份';
+    select.appendChild(allOption);
+    months.forEach(month => {
+      const option = document.createElement('option');
+      option.value = month;
+      option.textContent = month;
+      select.appendChild(option);
+    });
+    select.value = activeMonth;
+    $('summaryScope').textContent = `${activeMonth === 'ALL' ? '全部月份' : activeMonth} · 按覆盖日期数量降序显示`;
+  }
+
+  function normalizeState(candidate) {
+    const result = candidate && typeof candidate === 'object' ? clone(candidate) : clone(DEFAULT_STATE);
+    result.columns = Array.isArray(result.columns) && result.columns.length ? result.columns.map(displayText) : [''];
+    result.tags = Array.isArray(result.tags) ? result.tags.map(displayText) : [];
+    result.tags = Array.from({ length: result.columns.length }, (_, index) => result.tags[index] || '');
+    result.matrix = Array.isArray(result.matrix) ? result.matrix : [];
+    result.matrix = result.matrix.map(row => Array.from({ length: result.columns.length }, (_, index) => displayText(Array.isArray(row) ? row[index] : '')));
+    if (!result.matrix.length) result.matrix = [Array(result.columns.length).fill('')];
+    while (result.matrix.length < 5) result.matrix.push(Array(result.columns.length).fill(''));
+    return result;
+  }
+
+  function loadState() {
+    try {
+      const saved = localStorage.getItem(STORAGE_KEY);
+      return saved ? normalizeState(JSON.parse(saved)) : null;
+    } catch (error) {
+      console.warn('读取本地数据失败，已恢复默认数据。', error);
+      return null;
+    }
+  }
+
+  function saveState() {
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+      $('saveStatus').textContent = '刚刚自动保存';
+      clearTimeout(saveState.timer);
+      saveState.timer = setTimeout(() => {
+        $('saveStatus').textContent = '数据已保存在当前浏览器';
+      }, 1300);
+    } catch (error) {
+      $('saveStatus').textContent = '浏览器无法保存数据';
+      console.warn('本地保存失败。', error);
+    }
+  }
+
+  function getTagTheme(tag) {
+    const key = displayText(tag).normalize('NFKC');
+    if (!key) return { bg: '#fff', border: '#d0d5dd', text: '#667085' };
+    let hash = 0;
+    for (const character of key) hash = (hash * 31 + character.charCodeAt(0)) >>> 0;
+    return TAG_THEMES[hash % TAG_THEMES.length];
+  }
+
+  function applyTagTheme(input, tag) {
+    const theme = getTagTheme(tag);
+    input.style.background = theme.bg;
+    input.style.borderColor = theme.border;
+    input.style.color = theme.text;
+  }
+
+  function analyzeState(dataState, includedColumns = null) {
+    const map = new Map();
+    const allowedColumns = includedColumns ? new Set(includedColumns) : null;
+    dataState.matrix.forEach((row, rowIndex) => {
+      row.forEach((rawValue, colIndex) => {
+        if (allowedColumns && !allowedColumns.has(colIndex)) return;
+        const name = displayText(rawValue);
+        const key = normalizeStock(name);
+        if (!key) return;
+        if (!map.has(key)) map.set(key, { key, name, columns: new Set(), cells: [] });
+        const item = map.get(key);
+        item.columns.add(colIndex);
+        item.cells.push(`${rowIndex}-${colIndex}`);
+      });
+    });
+    const duplicates = [...map.values()]
+      .filter(item => item.columns.size >= 2)
+      .sort((a, b) => b.columns.size - a.columns.size || a.name.localeCompare(b.name, 'zh-CN'));
+    return {
+      duplicates,
+      duplicateCells: new Set(duplicates.flatMap(item => item.cells)),
+      records: [...map.values()].reduce((sum, item) => sum + item.cells.length, 0),
+      maxNodes: duplicates.length ? duplicates[0].columns.size : 0
+    };
+  }
+
+  function getAnalysis() {
+    return analyzeState(state, getVisibleColumnIndexes());
+  }
+
+  function escapeHtml(value) {
+    const text = String(value);
+    return text
+      .replaceAll('&', '&amp;')
+      .replaceAll('<', '&lt;')
+      .replaceAll('>', '&gt;')
+      .replaceAll('"', '&quot;')
+      .replaceAll("'", '&#39;');
+  }
+
+  function render() {
+    state = normalizeState(state);
+    renderMonthOptions();
+    const visibleColumns = getVisibleColumnIndexes();
+    const analysis = getAnalysis();
+    renderHead(visibleColumns);
+    renderBody(analysis.duplicateCells, visibleColumns);
+    renderSummary(analysis.duplicates);
+    $('dateCount').textContent = visibleColumns.length;
+    $('recordCount').textContent = analysis.records;
+    $('duplicateCount').textContent = analysis.duplicates.length;
+    $('maxNodeCount').textContent = analysis.maxNodes;
+    saveState();
+  }
+
+  function renderHead(visibleColumns) {
+    const tr = document.createElement('tr');
+    tr.innerHTML = '<th class="index">序号</th>';
+    visibleColumns.forEach(colIndex => {
+      const date = state.columns[colIndex];
+      const th = document.createElement('th');
+      const head = document.createElement('div');
+      head.className = 'date-head';
+      const dateBox = document.createElement('div');
+      dateBox.className = 'date-box';
+
+      const dateInput = document.createElement('input');
+      dateInput.className = 'date-input';
+      dateInput.value = date;
+      dateInput.placeholder = '填写日期';
+      dateInput.addEventListener('input', event => {
+        state.columns[colIndex] = event.target.value;
+        renderSummary(getAnalysis().duplicates);
+        saveState();
+      });
+      dateInput.addEventListener('blur', () => render());
+
+      const deleteButton = document.createElement('button');
+      deleteButton.className = 'delete-col';
+      deleteButton.title = '删除该日期';
+      deleteButton.type = 'button';
+      deleteButton.textContent = '×';
+      deleteButton.addEventListener('click', () => removeColumn(colIndex));
+
+      const tagInput = document.createElement('input');
+      tagInput.className = 'tag-input';
+      tagInput.value = state.tags[colIndex] || '';
+      tagInput.placeholder = '添加分类标签';
+      applyTagTheme(tagInput, tagInput.value);
+      tagInput.addEventListener('input', event => {
+        state.tags[colIndex] = event.target.value;
+        applyTagTheme(event.target, event.target.value);
+        renderSummary(getAnalysis().duplicates);
+        saveState();
+      });
+
+      dateBox.append(dateInput, deleteButton);
+      head.append(dateBox, tagInput);
+      th.appendChild(head);
+      tr.appendChild(th);
+    });
+    $('tableHead').replaceChildren(tr);
+  }
+
+  function renderBody(duplicateCells, visibleColumns) {
+    const fragment = document.createDocumentFragment();
+    state.matrix.forEach((row, rowIndex) => {
+      const tr = document.createElement('tr');
+      const index = document.createElement('td');
+      index.className = 'index';
+      index.textContent = rowIndex + 1;
+      tr.appendChild(index);
+      visibleColumns.forEach(colIndex => {
+        const td = document.createElement('td');
+        td.classList.toggle('duplicate-cell', duplicateCells.has(`${rowIndex}-${colIndex}`));
+        const input = document.createElement('input');
+        input.className = 'cell-input';
+        input.dataset.colIndex = String(colIndex);
+        input.value = row[colIndex] || '';
+        input.placeholder = '输入股票名称';
+        input.addEventListener('input', event => {
+          state.matrix[rowIndex][colIndex] = event.target.value;
+          refreshHighlights();
+          saveState();
+        });
+        input.addEventListener('paste', event => handlePaste(event, rowIndex, colIndex));
+        input.addEventListener('keydown', event => {
+          if (event.key === 'Enter' && rowIndex === state.matrix.length - 1) {
+            addRow();
+            setTimeout(() => {
+              const selector = `input[data-col-index="${colIndex}"]`;
+              const target = $('tableBody').rows[rowIndex + 1].querySelector(selector);
+              if (target) target.focus();
+            }, 0);
+          }
+        });
+        td.appendChild(input);
+        tr.appendChild(td);
+      });
+      fragment.appendChild(tr);
+    });
+    $('tableBody').replaceChildren(fragment);
+  }
+
+  function refreshHighlights() {
+    const analysis = getAnalysis();
+    const visibleColumns = getVisibleColumnIndexes();
+    [...$('tableBody').rows].forEach((tr, rowIndex) => {
+      visibleColumns.forEach((colIndex, visibleIndex) => {
+        tr.cells[visibleIndex + 1].classList.toggle('duplicate-cell', analysis.duplicateCells.has(`${rowIndex}-${colIndex}`));
+      });
+    });
+    renderSummary(analysis.duplicates);
+    $('recordCount').textContent = analysis.records;
+    $('duplicateCount').textContent = analysis.duplicates.length;
+    $('maxNodeCount').textContent = analysis.maxNodes;
+  }
+
+  function renderSummary(duplicates) {
+    const summary = $('summary');
+    if (!duplicates.length) {
+      summary.innerHTML = '<div class="empty">当前尚未发现跨日期重复出现的股票。<br>录入数据后将自动生成标记结果。</div>';
+      return;
+    }
+    summary.innerHTML = duplicates.map(item => {
+      const nodes = [...item.columns].map(index => ({
+        date: state.columns[index] || `日期${index + 1}`,
+        tag: state.tags[index] || ''
+      }));
+      const nodeHtml = nodes.map(node => {
+        const theme = getTagTheme(node.tag);
+        const tagHtml = node.tag ? `<span class="date-tag-label">${escapeHtml(node.tag)}</span>` : '';
+        return `<span class="date-tag" style="background:${theme.bg};border-color:${theme.border};color:${theme.text}"><span>${escapeHtml(node.date)}</span>${tagHtml}</span>`;
+      }).join('');
+      return `<div class="dup-card"><div class="dup-top"><span class="dup-name">${escapeHtml(item.name)}</span><span class="badge">${nodes.length} 个节点</span></div><div class="dates">${nodeHtml}</div></div>`;
+    }).join('');
+  }
+
+  function addColumn() {
+    activeMonth = 'ALL';
+    state.columns.push('');
+    state.tags.push('');
+    state.matrix.forEach(row => row.push(''));
+    render();
+    setTimeout(() => {
+      const inputs = document.querySelectorAll('.date-input');
+      if (inputs[state.columns.length - 1]) inputs[state.columns.length - 1].focus();
+    }, 0);
+  }
+
+  function removeColumn(index) {
+    if (state.columns.length <= 1) {
+      showToast('至少需要保留一个日期列');
+      return;
+    }
+    state.columns.splice(index, 1);
+    state.tags.splice(index, 1);
+    state.matrix.forEach(row => row.splice(index, 1));
+    render();
+  }
+
+  function addRow() {
+    state.matrix.push(Array(state.columns.length).fill(''));
+    render();
+  }
+
+  function splitPastedLines(text) {
+    const carriageReturn = String.fromCharCode(13);
+    const lineFeed = String.fromCharCode(10);
+    return String(text || '')
+      .replaceAll(carriageReturn + lineFeed, lineFeed)
+      .replaceAll(carriageReturn, lineFeed)
+      .split(lineFeed)
+      .map(displayText)
+      .filter(Boolean);
+  }
+
+  function handlePaste(event, startRow, colIndex) {
+    const lines = splitPastedLines(event.clipboardData.getData('text'));
+    if (lines.length <= 1) return;
+    event.preventDefault();
+    while (state.matrix.length < startRow + lines.length) {
+      state.matrix.push(Array(state.columns.length).fill(''));
+    }
+    lines.forEach((line, index) => {
+      state.matrix[startRow + index][colIndex] = line;
+    });
+    render();
+    showToast(`已粘贴 ${lines.length} 条股票名称`);
+  }
+
+  function showToast(message) {
+    $('toast').textContent = message;
+    $('toast').classList.add('show');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => $('toast').classList.remove('show'), 2300);
+  }
+
+  function fillSample() {
+    activeMonth = 'ALL';
+    state = clone(DEFAULT_STATE);
+    render();
+    showToast('已载入示例数据，可直接修改或上传 Excel 替换');
+  }
+
+  function clearData() {
+    const columns = state.columns.length ? [...state.columns] : [''];
+    const tags = Array.from({ length: columns.length }, (_, index) => state.tags[index] || '');
+    state = {
+      columns,
+      tags,
+      matrix: Array.from({ length: 5 }, () => Array(columns.length).fill(''))
+    };
+    render();
+    showToast('股票内容已清空，日期及标签已保留');
+  }
+
+  function toArrayOfArrays() {
+    let lastNonEmpty = -1;
+    state.matrix.forEach((row, index) => {
+      if (row.some(cell => displayText(cell))) lastNonEmpty = index;
+    });
+    const rows = lastNonEmpty >= 0 ? state.matrix.slice(0, lastNonEmpty + 1) : [Array(state.columns.length).fill('')];
+    return [state.columns, state.tags.map(tag => tag ? `标签：${tag}` : ''), ...rows];
+  }
+
+  function exportWorkbook(filename) {
+    if (typeof XLSX === 'undefined') {
+      showToast('Excel 组件未加载，请检查网络后重试');
+      return false;
+    }
+    const worksheet = XLSX.utils.aoa_to_sheet(toArrayOfArrays());
+    worksheet['!cols'] = state.columns.map(() => ({ wch: 18 }));
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, '关键节点涨停股票');
+    XLSX.writeFile(workbook, filename);
+    return true;
+  }
+
+  function downloadTemplate() {
+    const current = clone(state);
+    state = {
+      columns: ['2026-05-01', '2026-05-08', '2026-05-15'],
+      tags: ['指数共振', '政策驱动', '指数共振'],
+      matrix: [['股票A', '股票B', '股票A'], ['股票C', '', '股票D']]
+    };
+    const exported = exportWorkbook('关键节点涨停股票录入模板.xlsx');
+    state = current;
+    if (exported) showToast('模板已下载：第一行日期，第二行标签，后续行录入股票');
+  }
+
+  function parseTagCell(value) {
+    const text = displayText(value);
+    if (text.startsWith('标签：')) return displayText(text.slice(3));
+    if (text.startsWith('标签:')) return displayText(text.slice(3));
+    return null;
+  }
+
+  async function importExcel(file) {
+    if (typeof XLSX === 'undefined') {
+      showToast('Excel 组件未加载，请检查网络后重试');
+      return;
+    }
+    try {
+      const buffer = await file.arrayBuffer();
+      const workbook = XLSX.read(buffer, { type: 'array', cellDates: true });
+      const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
+      let rows = XLSX.utils.sheet_to_json(firstSheet, { header: 1, defval: '', raw: false, dateNF: 'yyyy-mm-dd' });
+      rows = rows.filter(row => row.some(cell => displayText(cell)));
+      if (!rows.length || !rows[0].some(cell => displayText(cell))) {
+        showToast('导入失败：文件中未发现日期表头');
+        return;
+      }
+      const activeCols = rows[0].map((cell, index) => displayText(cell) ? index : -1).filter(index => index >= 0);
+      const hasTagRow = Boolean(rows[1]) && activeCols.some(index => parseTagCell(rows[1][index]) !== null);
+      activeMonth = 'ALL';
+      state = normalizeState({
+        columns: activeCols.map(index => displayText(rows[0][index])),
+        tags: activeCols.map(index => hasTagRow ? (parseTagCell(rows[1][index]) || '') : ''),
+        matrix: rows.slice(hasTagRow ? 2 : 1).map(row => activeCols.map(index => displayText(row[index])))
+      });
+      render();
+      showToast(`已导入 ${state.columns.length} 个日期列，系统已自动识别重复股票`);
+    } catch (error) {
+      console.error(error);
+      showToast('Excel 读取失败，请确认文件格式正确');
+    } finally {
+      $('fileInput').value = '';
+    }
+  }
+
+  function assertTest(condition, message) {
+    if (!condition) throw new Error(`自检失败：${message}`);
+  }
+
+  function runSelfTests() {
+    const repaired = normalizeState({ columns: ['日期A', '日期B'], matrix: [] });
+    assertTest(repaired.matrix.length >= 5 && repaired.matrix[0].length === 2, '空数据应初始化为可编辑矩阵');
+    assertTest(repaired.tags.length === 2, '旧版无标签数据应自动补齐标签数组');
+
+    const fixture = normalizeState({
+      columns: ['D1', 'D2', 'D3'],
+      tags: ['指数共振', '政策驱动', '指数共振'],
+      matrix: [['中矿资源', ' 中矿资源 ', '紫金矿业'], ['西部矿业', '', '西部矿业']]
+    });
+    const analysis = analyzeState(fixture);
+    assertTest(analysis.duplicates.length === 2, '跨日期重复股票数量应正确');
+    assertTest(analysis.duplicates[0].columns.size === 2, '同一股票应按不同日期统计节点数');
+    assertTest(normalizeStock(' 中矿 资源 ') === normalizeStock('中矿资源'), '股票名称应忽略空格差异');
+    assertTest(normalizeStock('中矿　资源') === normalizeStock('中矿资源'), '股票名称应忽略全角空格差异');
+    assertTest(normalizeStock('中矿' + String.fromCharCode(9) + '资源') === normalizeStock('中矿资源'), '股票名称应忽略制表符差异');
+    assertTest(JSON.stringify(getTagTheme('指数共振')) === JSON.stringify(getTagTheme('指数共振')), '相同标签应保持同色');
+    assertTest(getMonthKey('2026-05-18') === '2026-05' && getMonthKey('2026年6月1日') === '2026-06', '应正确识别日期所属月份');
+    const monthOnly = analyzeState(fixture, [0, 1]);
+    assertTest(monthOnly.duplicates.length === 1 && monthOnly.duplicates[0].name === '中矿资源', '按月筛选后应仅分析当前月份范围');
+
+    const sameDayOnly = analyzeState(normalizeState({ columns: ['D1', 'D2'], tags: [], matrix: [['股票A', ''], ['股票A', '']] }));
+    assertTest(sameDayOnly.duplicates.length === 0, '同一日期重复录入不应被识别为跨节点重复');
+    assertTest(parseTagCell('标签：指数共振') === '指数共振' && parseTagCell('股票A') === null, 'Excel 标签行应正确识别');
+    console.info('关键节点涨停股票标记系统：启动自检通过（11 项）。');
+  }
+
+  function bindEvents() {
+    $('monthFilter').addEventListener('change', event => {
+      activeMonth = event.target.value;
+      render();
+      showToast(activeMonth === 'ALL' ? '已显示全部月份数据' : `已筛选 ${activeMonth} 的关键节点数据`);
+    });
+    $('addDateBtn').addEventListener('click', addColumn);
+    $('addRowBtn').addEventListener('click', addRow);
+    $('sampleBtn').addEventListener('click', fillSample);
+    $('clearBtn').addEventListener('click', clearData);
+    $('exportBtn').addEventListener('click', () => {
+      if (exportWorkbook('关键节点涨停股票标记结果.xlsx')) showToast('当前表格与日期标签已导出');
+    });
+    $('templateBtn').addEventListener('click', downloadTemplate);
+    $('fileInput').addEventListener('change', event => {
+      if (event.target.files[0]) importExcel(event.target.files[0]);
+    });
+    $('helpBtn').addEventListener('click', () => $('helpDialog').classList.add('open'));
+    $('closeHelpBtn').addEventListener('click', () => $('helpDialog').classList.remove('open'));
+    $('helpDialog').addEventListener('click', event => {
+      if (event.target === $('helpDialog')) $('helpDialog').classList.remove('open');
+    });
+    document.addEventListener('keydown', event => {
+      if (event.key === 'Escape') $('helpDialog').classList.remove('open');
+    });
+  }
+
+  try {
+    runSelfTests();
+    bindEvents();
+    render();
+  } catch (error) {
+    console.error(error);
+    document.body.innerHTML = '<div style="padding:32px;font-family:Microsoft YaHei;color:#b42318">系统初始化失败，请打开浏览器控制台查看错误详情。</div>';
+  }
+</script>
+</body>
+</html>
